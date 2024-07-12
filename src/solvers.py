@@ -1,9 +1,11 @@
+import os
+import json
+from datetime import datetime
 import torch
 from torch.utils.data import DataLoader
 import random
 import numpy as np
 import psutil
-import os
 
 def print_memory_usage():
     process = psutil.Process(os.getpid())
@@ -15,6 +17,10 @@ class Solver:
         self.dataset = dataset
         self.train_args = train_args
         self.num_layers = getattr(model, 'num_layers', 2)
+        self.log_dir = os.path.join('logs', datetime.now().strftime('%Y%m%d_%H%M%S'))
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_file = os.path.join(self.log_dir, 'training_log.jsonl')
+        self.best_hr10 = 0
 
     def run(self):
         device = self.train_args['device']
@@ -30,6 +36,29 @@ class Solver:
                 loss = self.train(optimizer)
                 hr10 = self.test()
                 print(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}, HR@10: {hr10:.4f}')
+                log_entry = {
+                    'run': run + 1,
+                    'epoch': epoch,
+                    'loss': float(loss),
+                    'hr10': float(hr10)
+                }
+
+                # 로그 저장
+                with open(self.log_file, 'a') as f:
+                    f.write(json.dumps(log_entry) + '\n')
+                
+                # 최고 성능 모델 저장
+                if hr10 > self.best_hr10:
+                    self.best_hr10 = hr10
+                    torch.save(self.model.state_dict(), os.path.join(self.log_dir, 'best_model.pth'))
+
+            # 각 run의 마지막 모델 저장
+            torch.save(self.model.state_dict(), os.path.join(self.log_dir, f'model_run_{run+1}.pth'))
+
+        # 모든 학습이 끝난 후 최종 모델 저장
+        torch.save(self.model.state_dict(), os.path.join(self.log_dir, 'final_model.pth'))
+                
+
 
     def train(self, optimizer):
         self.model.train()

@@ -5,3 +5,6 @@ data/*
 
 # pycache
 **/__pycache__/*
+
+# logs
+logs/*
