@@ -1,0 +1,7 @@
+*.ipynb
+
+# data
+data/*
+
+# pycache
+**/__pycache__/*
