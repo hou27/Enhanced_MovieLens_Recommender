@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 import random
 import numpy as np
 import psutil
+import tqdm
 
 def print_memory_usage():
     process = psutil.Process(os.getpid())
@@ -31,8 +32,8 @@ class Solver:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.train_args['lr'],
                                          weight_decay=self.train_args['weight_decay'])
 
-            # print("\n\n\n\n\ntill ok (before first epoch)\n\n\n\n\n")
             for epoch in range(1, self.train_args['epochs'] + 1):
+                print(f"Run: {run + 1:02d}, Epoch: {epoch:02d}")
                 loss = self.train(optimizer)
                 hr10 = self.test()
                 print(f'Run: {run + 1:02d}, Epoch: {epoch:02d}, Loss: {loss:.4f}, HR@10: {hr10:.4f}')
@@ -63,6 +64,7 @@ class Solver:
     def train(self, optimizer):
         self.model.train()
         total_loss = 0
+        total_samples = 0
 
         # 시드 고정 코드 추가
         seed = 2019
@@ -83,27 +85,8 @@ class Solver:
             collate_fn=self.dataset.collate_fn
         )
 
-        # for batch in loader:
-        #     batch = {k: {k2: v2.to(self.train_args['device']) for k2, v2 in v.items()} for k, v in batch.items()}
-        #     optimizer.zero_grad()
-
-        #     user_movie_edge_index = batch[('user', 'rates', 'movie')]['edge_index']
-        #     user_movie_ratings = batch[('user', 'rates', 'movie')]['edge_attr']
-
-        #     pos_edge_index = user_movie_edge_index[:, user_movie_ratings >= 3]
-        #     neg_edge_index = user_movie_edge_index[:, user_movie_ratings < 3]
-        #     print(f'pos_edge_index.shape: {pos_edge_index.shape}')
-        #     print(f'neg_edge_index.shape: {neg_edge_index.shape}')
-
-        #     loss = self.model.loss(pos_edge_index, neg_edge_index)
-        #     loss.backward()
-        #     optimizer.step()
-        #     total_loss += float(loss) * pos_edge_index.size(1)
-
-        # return total_loss / len(self.dataset)
-        
-        # positive/negative 샘플 생성 시 양성 샘플과 음성 샘플의 비율을 조정하고, BPR 손실을 계산할 때 이 불균형을 고려
-        for batch in loader:
+        train_bar = tqdm.tqdm(loader, total=len(loader), desc="Training")
+        for _, batch in enumerate(train_bar):
             batch = {k: v.to(self.train_args['device']) for k, v in batch.items()}
             optimizer.zero_grad()
 
@@ -113,13 +96,18 @@ class Solver:
             loss = self.model.loss(pos_edge_index, neg_edge_index)
             loss.backward()
             optimizer.step()
-            total_loss += float(loss) * pos_edge_index.size(1)
+            
+            batch_size = pos_edge_index.size(1) + neg_edge_index.size(1)  # 양성 + 음성 샘플 수
+            total_loss += float(loss) * batch_size
+            total_samples += batch_size
 
-        return total_loss / len(self.dataset)
+        return total_loss / total_samples
 
     @torch.no_grad()
     def test(self):
         self.model.eval()
+
+        # TODO: Implement prepare_test_data method in dataset.py
 
         loader = DataLoader(
             self.dataset,
@@ -130,23 +118,51 @@ class Solver:
         )
 
         hits = []
-        for batch in loader:
+        test_bar = tqdm.tqdm(loader, total=len(loader), desc="Testing")
+        for _, batch in enumerate(test_bar):
             batch = {k: v.to(self.train_args['device']) for k, v in batch.items()}
-            
-            pos_edge_index = batch['pos_edge_index']
-            
-            users = pos_edge_index[0].unique()
+            users = batch['pos_edge_index'][0].unique()
+            print("unique users : ", users)
+            print("batch['pos_edge_index'] : ", batch['pos_edge_index'][0])
+
             for user in users:
-                user_pos_movies = pos_edge_index[1][pos_edge_index[0] == user]
+                if len(users) == 0:
+                    continue # skip if no positive items
+                
+                # generate candidates
+                user_pos_movies = batch['pos_edge_index'][1][batch['pos_edge_index'][0] == user]
+                user_neg_movies = batch['neg_edge_index'][1][batch['neg_edge_index'][0] == user]
+                pos_edge_index = torch.stack([user.repeat(user_pos_movies.size(0)), user_pos_movies]).to(torch.long)
+                neg_edge_index = torch.stack([user.repeat(user_neg_movies.size(0)), user_neg_movies]).to(torch.long)
 
-                all_movies = torch.arange(self.dataset.data['movie']['num_nodes']).to(self.train_args['device'])
-                user_tensor = user.repeat(all_movies.size(0))
-                pred = self.model.predict(torch.stack([user_tensor, all_movies]))
+                if len(user_neg_movies) < self.train_args['num_neg_candidates']:
+                    additional_neg_items = torch.tensor(self.dataset.find_items(user, user_neg_movies.tolist(), self.train_args['num_neg_candidates'] - len(user_neg_movies), find_similar=True), device=self.train_args['device'], dtype=torch.long)
+                    neg_edge_index = torch.cat([neg_edge_index, torch.stack([user.repeat(additional_neg_items.size(0)), additional_neg_items])], dim=1)
 
-                _, indices = torch.sort(pred, descending=True)
-                recommended = indices[:10]
 
-                hit = any(item in user_pos_movies for item in recommended)
+                pos_pred = self.model.predict(pos_edge_index)
+                neg_pred = self.model.predict(neg_edge_index)
+
+                all_preds = torch.cat([pos_pred, neg_pred])
+                print(f"User: {user}, Pos movies: {len(user_pos_movies)}, Neg movies: {len(user_neg_movies)}")
+                print(f"Pos pred shape: {pos_pred.shape}, Neg pred shape: {neg_pred.shape}")
+                print(f"All preds shape: {all_preds.shape}")
+                _, indices = torch.topk(all_preds, 10)
+                recommended = torch.cat([user_pos_movies, user_neg_movies])[indices]
+                hit = torch.any(torch.isin(recommended, user_pos_movies)).item()
                 hits.append(hit)
 
         return sum(hits) / len(hits)  # This is HR@10
+
+
+        #         all_movies = torch.arange(self.dataset.data['movie']['num_nodes']).to(self.train_args['device'])
+        #         user_tensor = user.repeat(all_movies.size(0))
+        #         pred = self.model.predict(torch.stack([user_tensor, all_movies]))
+
+        #         _, indices = torch.sort(pred, descending=True)
+        #         recommended = indices[:10]
+
+        #         hit = any(item in user_pos_movies for item in recommended)
+        #         hits.append(hit)
+
+        # return sum(hits) / len(hits)  # This is HR@10

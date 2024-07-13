@@ -30,6 +30,7 @@ parser.add_argument('--batch_size', type=int, default=1024, help='')
 parser.add_argument('--num_workers', type=int, default=12, help='')
 parser.add_argument('--lr', type=float, default=0.001, help='')
 parser.add_argument('--weight_decay', type=float, default=0.001, help='')
+parser.add_argument('--num_neg_candidates', type=int, default=99, help='')
 
 args = parser.parse_args()
 
@@ -63,7 +64,8 @@ train_args = {
     'num_workers': args.num_workers,
     'lr': args.lr,
     'weight_decay': args.weight_decay,
-    'device': device
+    'device': device,
+    'num_neg_candidates': args.num_neg_candidates
 }
 
 print('Dataset params:', dataset_args)

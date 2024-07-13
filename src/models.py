@@ -9,43 +9,17 @@ from torch_geometric.nn.inits import glorot
 def update_pea_graph_input(dataset_args, train_args, data):
     if dataset_args['name'] == "Movielens":
         device = train_args['device']
-
-        # 기본 엣지 인덱스 추출
-        # user2item_edge_index = data['user', 'rates', 'movie'].edge_index.to(device)
-        # item2user_edge_index = torch.flip(user2item_edge_index, dims=[0])
-        # item2year_edge_index = data['movie', 'in', 'year'].edge_index.to(device)
-        # year2item_edge_index = torch.flip(item2year_edge_index, dims=[0])
-        # item2genre_edge_index = data['movie', 'of', 'genre'].edge_index.to(device)
-        # genre2item_edge_index = torch.flip(item2genre_edge_index, dims=[0])
-        # tag2item_edge_index = data['tag', 'describes', 'movie'].edge_index.to(device)
-        # item2tag_edge_index = torch.flip(tag2item_edge_index, dims=[0])
-        # tag2user_edge_index = data['tag', 'used_by', 'user'].edge_index.to(device)
-        # user2tag_edge_index = torch.flip(tag2user_edge_index, dims=[0])
         
         user2item_edge_index = data['user', 'rates', 'movie']['edge_index'].to(device)
-        # print("user2item_edge_index shape :", user2item_edge_index.shape)
         item2user_edge_index = user2item_edge_index.flip([0])
-        # print("item2user_edge_index shape :", item2user_edge_index.shape)
         item2year_edge_index = data['movie', 'in', 'year']['edge_index'].to(device)
-        # print("item2year_edge_index shape :", item2year_edge_index.shape)
         year2item_edge_index = item2year_edge_index.flip([0])
-        # print("year2item_edge_index shape :", year2item_edge_index.shape)
         item2genre_edge_index = data['movie', 'of', 'genre']['edge_index'].to(device)
-        # print("item2genre_edge_index shape :", item2genre_edge_index.shape)
         genre2item_edge_index = item2genre_edge_index.flip([0])
-        # print("genre2item_edge_index shape :", genre2item_edge_index.shape)
         tag2item_edge_index = data['tag', 'describes', 'movie']['edge_index'].to(device)
-        # print("tag2item_edge_index shape :", tag2item_edge_index.shape)
         item2tag_edge_index = tag2item_edge_index.flip([0])
-        # print("item2tag_edge_index shape :", item2tag_edge_index.shape)
         tag2user_edge_index = data['tag', 'used_by', 'user']['edge_index'].to(device)
-        # print("tag2user_edge_index shape :", tag2user_edge_index.shape)
         user2tag_edge_index = tag2user_edge_index.flip([0])
-        # print("user2tag_edge_index shape :", user2tag_edge_index.shape)
-
-        # if dataset_args['name'] == "25m":
-        #     genome_tag2item_edge_index = data['genome_tag', 'describes', 'movie']['edge_index'].to(device)
-        #     item2genome_tag_edge_index = torch.flip(genome_tag2item_edge_index, dims=[0])
 
         # 메타 패스 정의
         meta_path_edge_indices = [
@@ -98,26 +72,6 @@ class PEAGATChannel(nn.Module):
     def reset_parameters(self):
         for layer in self.gnn_layers:
             layer.reset_parameters()
-    
-    # def forward(self, x, edge_index_list):
-    #     assert len(edge_index_list) == self.num_steps
-    #     for step_idx in range(self.num_steps):
-    #         edge_index = edge_index_list[step_idx]
-            
-    #         # 엣지 인덱스 유효성 검사
-    #         if edge_index.max() >= x.size(0):
-    #             print(f"Error in step {step_idx}: Edge index {edge_index.max().item()} exceeds number of nodes {x.size(0)}")
-    #             problematic_indices = torch.where(edge_index >= x.size(0))[0]
-    #             print(f"Problematic indices: {problematic_indices}")
-    #             # print(f"Values at problematic indices: {edge_index[problematic_indices]}")
-    #             print(f"Problem path edges: {edge_index[:, problematic_indices]}")
-
-    #         x_src = x[edge_index[0]]
-    #         x_dst = x[edge_index[1]]
-    #         x = self.gnn_layers[step_idx]((x_src, x_dst), edge_index)
-    #         if step_idx < self.num_steps - 1:
-    #             x = F.relu(x)
-    #     return x
     def forward(self, x, edge_index_list):
         assert len(edge_index_list) == self.num_steps
         for step_idx in range(self.num_steps):
@@ -147,33 +101,10 @@ class PEAGATRecsysModel(nn.Module):
         self.meta_path_steps = meta_path_steps.split(",")
         self.if_use_features = if_use_features
         self.num_layers = num_layers
-        # print("\n\n\n\n\n\n\n")
-        # print("data :", data)
-        # print("\n\n\n\n\n\n\n")
+        self.l2_coeff = 1e-5
 
         if not self.if_use_features:
-            # self.embeddings = nn.ModuleDict({
-            #     node_type: nn.Embedding(data[node_type].num_nodes, hidden_dim)
-            #     for node_type in data["node_types"]
-            # })
             self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
-            # self.embeddings = Parameter(Tensor(data["num_nodes"], hidden_dim))
-            # print(self.embeddings)
-            # print(self.embeddings.__sizeof__())
-
-        # print("Data structure:")
-        # for node_type in data['node_types']:
-        #     print(f"{node_type}: {data[node_type]['num_nodes']} nodes")
-        # for edge_type in data['edge_types']:
-        #     print(f"{edge_type}: {data[edge_type]['edge_index'].shape[1]} edges")
-        
-        # total_nodes = sum(data[node_type]['num_nodes'] for node_type in data['node_types'])
-        # print(f"Total nodes: {total_nodes}")
-        # 데이터 일관성 확인
-        # total_nodes = sum(data[node_type]['num_nodes'] for node_type in data['node_types'])
-        # for edge_type in data['edge_types']:
-        #     edge_index = data[edge_type]['edge_index']
-        #     assert max(edge_index) < total_nodes, f"Edge index in {edge_type} exceeds total number of nodes"
 
         self.meta_path_edge_index_list = update_pea_graph_input(dataset_args, train_args, data)
         for i, edge_indices in enumerate(self.meta_path_edge_index_list):
@@ -212,8 +143,6 @@ class PEAGATRecsysModel(nn.Module):
         else:
             raise NotImplementedError("Feature-based model not implemented")
 
-        # print(f"x shape: {x.shape}")
-
         channel_outputs = [channel(x, path_edges).unsqueeze(1) for channel, path_edges in zip(self.pea_channels, self.meta_path_edge_index_list)]
         
         if metapath_idx is not None:
@@ -226,43 +155,12 @@ class PEAGATRecsysModel(nn.Module):
         elif self.channel_aggr == 'mean':
             x = x.mean(dim=1)
         elif self.channel_aggr == 'att':
-            # print(f"x shape: {x.shape}")
-            # print(f"att shape: {self.att.shape}")
             atts = F.softmax(torch.sum(x * self.att, dim=-1), dim=-1).unsqueeze(-1)
-            # print(f"atts shape: {atts.shape}")
             x = torch.sum(x * atts, dim=1)
         else:
             raise NotImplementedError('Other aggr methods not implemented!')
         
         return x
-    # def forward(self, metapath_idx=None, x_dict=None):
-    #     if not self.if_use_features:
-    #         x = torch.cat([emb.weight for emb in self.embeddings.values()])
-    #     else:
-    #         x = torch.cat([x_dict[node_type] for node_type in self.embeddings.keys()])
-
-    #     # # 임베딩 수와 노드 수 확인
-    #     # total_nodes = sum(data[node_type].num_nodes for node_type in data["node_types"])
-    #     # assert x.size(0) == total_nodes, "Number of embeddings does not match total number of nodes"
-
-    #     channel_outputs = [channel(x, path_edges).unsqueeze(1) for channel, path_edges in zip(self.pea_channels, self.meta_path_edge_index_list)]
-        
-    #     if metapath_idx is not None:
-    #         channel_outputs[metapath_idx] = torch.zeros_like(channel_outputs[metapath_idx])
-        
-    #     x = torch.cat(channel_outputs, dim=1)
-        
-    #     if self.channel_aggr == 'concat':
-    #         x = x.view(x.shape[0], -1)
-    #     elif self.channel_aggr == 'mean':
-    #         x = x.mean(dim=1)
-    #     elif self.channel_aggr == 'att':
-    #         atts = F.softmax(torch.sum(x * self.att, dim=-1), dim=-1).unsqueeze(-1)
-    #         x = torch.sum(x * atts, dim=1)
-    #     else:
-    #         raise NotImplementedError('Other aggr methods not implemented!')
-        
-    #     return x
 
     def predict(self, edge_index):
         x = self.forward()
@@ -275,9 +173,13 @@ class PEAGATRecsysModel(nn.Module):
     
     @staticmethod
     def bpr_loss(pos_preds, neg_preds):
-        return -torch.mean(torch.log(torch.sigmoid(pos_preds - neg_preds)))
+        """
+        Bayesian Personalized Ranking loss
+        """
+        return -torch.log(torch.sigmoid(pos_preds - neg_preds)).mean()
     
     def loss(self, pos_edge_index, neg_edge_index):
         pos_pred = self.predict(pos_edge_index)
         neg_pred = self.predict(neg_edge_index)
+
         return self.bpr_loss(pos_pred, neg_pred)
