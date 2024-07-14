@@ -86,20 +86,23 @@ class Solver:
         )
 
         train_bar = tqdm.tqdm(loader, total=len(loader), desc="Training")
-        for _, batch in enumerate(train_bar):
-            batch = {k: v.to(self.train_args['device']) for k, v in batch.items()}
-            optimizer.zero_grad()
+        for batch in train_bar:
+            users = batch['users'].to(self.train_args['device'])
+            pos_items = batch['pos_items'].to(self.train_args['device'])
+            neg_items = batch['neg_items'].to(self.train_args['device'])
 
-            pos_edge_index = batch['pos_edge_index']
-            neg_edge_index = batch['neg_edge_index']
+            pos_edge_index = torch.stack([users, pos_items])
+            neg_edge_index = torch.stack([users, neg_items])
 
             loss = self.model.loss(pos_edge_index, neg_edge_index)
             loss.backward()
             optimizer.step()
             
-            batch_size = pos_edge_index.size(1) + neg_edge_index.size(1)  # 양성 + 음성 샘플 수
+            batch_size = users.size(0)  # 양성 + 음성 샘플 수
             total_loss += float(loss) * batch_size
             total_samples += batch_size
+
+            train_bar.set_postfix(loss=f"{total_loss / total_samples:.4f}")
 
         return total_loss / total_samples
 
@@ -107,62 +110,27 @@ class Solver:
     def test(self):
         self.model.eval()
 
-        # TODO: Implement prepare_test_data method in dataset.py
-
-        loader = DataLoader(
-            self.dataset,
-            shuffle=False,
-            batch_size=self.train_args['batch_size'],
-            num_workers=self.train_args['num_workers'],
-            collate_fn=self.dataset.collate_fn
-        )
-
         hits = []
-        test_bar = tqdm.tqdm(loader, total=len(loader), desc="Testing")
-        for _, batch in enumerate(test_bar):
-            batch = {k: v.to(self.train_args['device']) for k, v in batch.items()}
-            users = batch['pos_edge_index'][0].unique()
-            print("unique users : ", users)
-            print("batch['pos_edge_index'] : ", batch['pos_edge_index'][0])
+        all_users = list(self.dataset.test_data.keys())
+        test_bar = tqdm.tqdm(all_users, total=len(all_users), desc="Testing")
+        
+        for user in test_bar:
+            test_samples = self.dataset.get_test_samples(user)
+            if test_samples is None:
+                continue
 
-            for user in users:
-                if len(users) == 0:
-                    continue # skip if no positive items
-                
-                # generate candidates
-                user_pos_movies = batch['pos_edge_index'][1][batch['pos_edge_index'][0] == user]
-                user_neg_movies = batch['neg_edge_index'][1][batch['neg_edge_index'][0] == user]
-                pos_edge_index = torch.stack([user.repeat(user_pos_movies.size(0)), user_pos_movies]).to(torch.long)
-                neg_edge_index = torch.stack([user.repeat(user_neg_movies.size(0)), user_neg_movies]).to(torch.long)
+            users, items, labels = test_samples
+            users = users.to(self.train_args['device'])
+            items = items.to(self.train_args['device'])
+            labels = labels.to(self.train_args['device'])
 
-                if len(user_neg_movies) < self.train_args['num_neg_candidates']:
-                    additional_neg_items = torch.tensor(self.dataset.find_items(user, user_neg_movies.tolist(), self.train_args['num_neg_candidates'] - len(user_neg_movies), find_similar=True), device=self.train_args['device'], dtype=torch.long)
-                    neg_edge_index = torch.cat([neg_edge_index, torch.stack([user.repeat(additional_neg_items.size(0)), additional_neg_items])], dim=1)
+            edge_index = torch.stack([users, items])
+            predictions = self.model.predict(edge_index)
+            
+            _, indices = torch.topk(predictions, 10)
+            hit = torch.any(labels[indices] == 1).item()
+            hits.append(hit)
 
-
-                pos_pred = self.model.predict(pos_edge_index)
-                neg_pred = self.model.predict(neg_edge_index)
-
-                all_preds = torch.cat([pos_pred, neg_pred])
-                print(f"User: {user}, Pos movies: {len(user_pos_movies)}, Neg movies: {len(user_neg_movies)}")
-                print(f"Pos pred shape: {pos_pred.shape}, Neg pred shape: {neg_pred.shape}")
-                print(f"All preds shape: {all_preds.shape}")
-                _, indices = torch.topk(all_preds, 10)
-                recommended = torch.cat([user_pos_movies, user_neg_movies])[indices]
-                hit = torch.any(torch.isin(recommended, user_pos_movies)).item()
-                hits.append(hit)
+            test_bar.set_postfix(HR10=f"{sum(hits) / len(hits):.4f}")
 
         return sum(hits) / len(hits)  # This is HR@10
-
-
-        #         all_movies = torch.arange(self.dataset.data['movie']['num_nodes']).to(self.train_args['device'])
-        #         user_tensor = user.repeat(all_movies.size(0))
-        #         pred = self.model.predict(torch.stack([user_tensor, all_movies]))
-
-        #         _, indices = torch.sort(pred, descending=True)
-        #         recommended = indices[:10]
-
-        #         hit = any(item in user_pos_movies for item in recommended)
-        #         hits.append(hit)
-
-        # return sum(hits) / len(hits)  # This is HR@10

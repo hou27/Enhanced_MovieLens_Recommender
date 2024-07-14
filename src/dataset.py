@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 import torch
@@ -9,14 +10,15 @@ from annoy import AnnoyIndex
 from tqdm import tqdm
 
 class MovieLens(torch.utils.data.Dataset):
-    def __init__(self, root, name, num_core, num_negative_samples=4, type=None):
+    def __init__(self, root, name, num_core, num_negative_samples=4, num_neg_candidates=99, type=None):
         self.root = root
         self.name = name
         self.num_negative_samples = num_negative_samples
+        self.num_neg_candidates = num_neg_candidates
         self.data = self.process()
 
         self.build_ann_index()
-        self.prepare_train_data()
+        self.prepare_data()
 
         super().__init__()
 
@@ -53,11 +55,19 @@ class MovieLens(torch.utils.data.Dataset):
                 current_offset += genome_tagging_df['genome_tid'].nunique()
 
         # 영화별 특징 벡터 생성
-        self.movie_feature_vectors = {}
-        for iid in tqdm(movies_df['iid'].unique(), desc="Generating movie feature vectors"):
-        # for iid in movies_df['iid'].unique():
-            feature_vector = full_genome_tagging_df[full_genome_tagging_df['iid'] == iid]['relevance'].values
-            self.movie_feature_vectors[iid + node_offsets['movie']] = torch.tensor(feature_vector, dtype=torch.float)
+        movie_feature_vectors = os.path.join(self.root, f'movie_feature_vectors_{self.name}.pkl')
+        if os.path.exists(movie_feature_vectors):
+            print('Loading existing movie feature vectors...')
+            with open(movie_feature_vectors, 'rb') as f:
+                self.movie_feature_vectors = pickle.load(f)
+        else:
+            self.movie_feature_vectors = {}
+            for iid in tqdm(movies_df['iid'].unique(), desc="Generating movie feature vectors"):
+            # for iid in movies_df['iid'].unique():
+                feature_vector = full_genome_tagging_df[full_genome_tagging_df['iid'] == iid]['relevance'].values
+                self.movie_feature_vectors[iid + node_offsets['movie']] = torch.tensor(feature_vector, dtype=torch.float)
+            with open(movie_feature_vectors, 'wb') as f:
+                pickle.dump(self.movie_feature_vectors, f)
 
         # 노드 설정
         data_dict['movie'] = {
@@ -181,41 +191,6 @@ class MovieLens(torch.utils.data.Dataset):
 
         return data_dict
     
-    def prepare_train_data(self):
-        print('Preparing training data...')
-        user_movie_edge_index = self.data[('user', 'rates', 'movie')]['edge_index']
-        user_movie_ratings = self.data[('user', 'rates', 'movie')]['edge_attr']
-
-        self.pos_edges = user_movie_edge_index[:, user_movie_ratings >= 3]
-        self.neg_edges = user_movie_edge_index[:, user_movie_ratings < 3]
-
-        self.user_pos_items = {}
-        self.user_neg_items = {}
-        for user in tqdm(torch.unique(user_movie_edge_index[0]), desc="Dividing user items"):
-        # for user in torch.unique(user_movie_edge_index[0]):
-            user_items = user_movie_edge_index[1][user_movie_edge_index[0] == user]
-            user_ratings = user_movie_ratings[user_movie_edge_index[0] == user]
-            
-            self.user_pos_items[user.item()] = user_items[user_ratings >= 3].tolist()
-            self.user_neg_items[user.item()] = user_items[user_ratings < 3].tolist()
-
-        self.min_samples = 10  # 최소 샘플 수 설정
-        self.augment_samples()
-        self.prepare_train_pairs()
-
-    def augment_samples(self):
-        for user in tqdm(self.user_pos_items.keys(), desc="Augmenting samples"):
-        # for user in self.user_pos_items.keys():
-            if len(self.user_pos_items[user]) < self.min_samples:
-                self.user_pos_items[user].extend(self.find_items(user, self.user_pos_items[user], self.min_samples - len(self.user_pos_items[user]), find_similar=True))
-            
-            if len(self.user_neg_items[user]) < self.min_samples:
-                if len(self.user_neg_items[user]) == 0:
-                    self.user_neg_items[user] = self.find_items(user, self.user_pos_items[user], self.min_samples, find_similar=False)
-                else:
-                    self.user_neg_items[user].extend(self.find_items(user, self.user_neg_items[user], self.min_samples - len(self.user_neg_items[user]), find_similar=True))
-    
-    # Annoy 라이브러리를 사용하여 유사한 아이템 찾기
     def build_ann_index(self):
         print('Building Annoy index...')
         ann_index_file = os.path.join(self.root, f'ann_index_{self.name}.ann')
@@ -253,6 +228,164 @@ class MovieLens(torch.utils.data.Dataset):
             with open(ann_mapping_file, 'wb') as f:
                 pickle.dump(mappings, f)
 
+    def prepare_data(self):
+        train_data_file = os.path.join(self.root, f'train_data_{self.name}.pkl')
+        test_data_file = os.path.join(self.root, f'test_data_{self.name}.pkl')
+        user_pos_items_file = os.path.join(self.root, f'user_pos_items_{self.name}.pkl')
+        user_neg_items_file = os.path.join(self.root, f'user_neg_items_{self.name}.pkl')
+
+        if os.path.exists(train_data_file) and os.path.exists(test_data_file) and os.path.exists(user_pos_items_file) and os.path.exists(user_neg_items_file):
+            print('Loading existing train and test data...')
+            with open(train_data_file, 'rb') as f:
+                self.train_data = pickle.load(f)
+            with open(test_data_file, 'rb') as f:
+                self.test_data = pickle.load(f)
+            with open(user_pos_items_file, 'rb') as f:
+                self.user_pos_items = pickle.load(f)
+            with open(user_neg_items_file, 'rb') as f:
+                self.user_neg_items = pickle.load(f)
+        else:
+            print('Preparing train and test data...')
+            self.prepare_train_test_data()
+            
+            try:
+                with open(train_data_file, 'wb') as f:
+                    pickle.dump(self.train_data, f)
+                with open(test_data_file, 'wb') as f:
+                    pickle.dump(self.test_data, f)
+                with open(user_pos_items_file, 'wb') as f:
+                    pickle.dump(self.user_pos_items, f)
+                with open(user_neg_items_file, 'wb') as f:
+                    pickle.dump(self.user_neg_items, f)
+                print('Data successfully saved.')
+            except Exception as e:
+                print(f'Error saving data: {e}')
+            
+
+    def prepare_train_test_data(self):
+        log_file = os.path.join('logs', 'prepare_train_test_data.jsonl')
+        self.train_data = []
+        self.test_data = {}
+        self.user_pos_items = {}
+        self.user_neg_items = {}
+
+        user_movie_edge_index = self.data[('user', 'rates', 'movie')]['edge_index']
+        user_movie_ratings = self.data[('user', 'rates', 'movie')]['edge_attr']
+
+        # all_items = set(self.movie_feature_vectors.keys())
+
+        for user in tqdm(torch.unique(user_movie_edge_index[0]), desc="Preparing train and test data"):
+            user = user.item()
+            user_items = user_movie_edge_index[1][user_movie_edge_index[0] == user]
+            user_ratings = user_movie_ratings[user_movie_edge_index[0] == user]
+
+            pos_items = user_items[user_ratings >= 3].tolist()
+            neg_items = user_items[user_ratings < 3].tolist()
+
+            self.user_pos_items[user] = pos_items
+            self.user_neg_items[user] = neg_items
+
+            # 테스트용 양성 샘플 선택
+            if len(pos_items) == 0:
+                print(f"User {user} has no positive samples")
+                continue
+            test_pos_item = pos_items.pop()
+
+            train_neg_items = set()
+            user_interacted_items = set(pos_items + neg_items + [test_pos_item])
+            
+            # print(f"User {user}: {len(pos_items)} positive samples, {len(neg_items)} negative samples")
+            for pos_item in pos_items:
+                # remaining_neg_items = list(set(neg_items) - train_neg_items)  # 중복 제거를 위해 set 사용
+                neg_samples_for_pos = neg_items.copy() # random.sample(remaining_neg_items, min(len(remaining_neg_items), self.num_negative_samples))
+
+                # 추가 음성 샘플이 필요한 경우
+                while len(neg_samples_for_pos) < self.num_negative_samples:
+                    # candidates = list(user_interacted_items - train_neg_items - set(neg_samples_for_pos))
+                    candidates = list(user_interacted_items - set(neg_samples_for_pos))
+                    if not candidates:
+                        print(f"Warning: No more candidates for user {user}")
+                        break
+
+                    # 추가 음성 샘플 찾기
+                    additional_neg_items = self.find_items(user, [pos_item], self.num_negative_samples - len(neg_samples_for_pos), find_similar=False)
+                    # additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items and item not in train_neg_items]
+                    additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items]
+
+                    if not additional_neg_items and len(neg_items) > 0:
+                        # print(f"User {user}: No more negative samples for positive item {pos_item}")
+                        # print(f"Finding similar items for negative samples with {len(neg_items)} items")
+                        additional_neg_items = self.find_items(user, neg_items, self.num_negative_samples - len(neg_samples_for_pos), find_similar=True)
+                        additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items]
+                        # print(f"User {user}: Found {len(additional_neg_items)} similar items for negative samples")
+
+                    if additional_neg_items:
+                        neg_samples_for_pos.extend(additional_neg_items[:self.num_negative_samples - len(neg_samples_for_pos)])
+                    else:
+                        # print("No more negative samples for user")
+                        additional_neg_items = self.find_items(user, pos_items, self.num_negative_samples - len(neg_samples_for_pos), find_similar=False)
+                        additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items]
+                        # print(f"User {user}: Found {len(additional_neg_items)} similar items for negative samples")
+                        neg_samples_for_pos.extend(additional_neg_items[:self.num_negative_samples - len(neg_samples_for_pos)])
+
+                neg_samples_for_current_pos = random.sample(neg_samples_for_pos, self.num_negative_samples)
+                for neg_item in neg_samples_for_current_pos:
+                    self.train_data.append((user, pos_item, neg_item))
+                    train_neg_items.add(neg_item)
+
+            # print(f"User {user}: {len(train_neg_items)} negative samples for positive items")
+            # 테스트 데이터 준비
+            available_neg_items = list(user_interacted_items - train_neg_items)
+
+            # 필요한 추가 음성 샘플 수 계산
+            num_additional_needed = max(0, 99 - len(available_neg_items))
+
+            while len(available_neg_items) < 99:
+                # print(f"User {user}: Finding {num_additional_needed} additional negative samples")
+                additional_items = self.find_items(user, [test_pos_item], num_additional_needed, find_similar=False)
+                
+                # 새로운 아이템만 추가
+                new_items = [item for item in additional_items 
+                            if item not in user_interacted_items 
+                            and item not in train_neg_items 
+                            and item not in available_neg_items]
+                
+                available_neg_items.extend(new_items)
+                
+                # 아직 99개를 채우지 못했다면 다시
+                num_additional_needed = 99 - len(available_neg_items)
+                
+                if not new_items:
+                    # print(f"Warning: User {user}: Could not find new negative samples. Trying with different strategy.")
+                    # 다른 전략 시도
+                    additional_items = self.find_items(user, neg_items, num_additional_needed, find_similar=True)
+                    new_items = [item for item in additional_items 
+                                if item not in user_interacted_items 
+                                and item not in train_neg_items 
+                                and item not in available_neg_items]
+                    available_neg_items.extend(new_items)
+                    
+                    if not new_items:
+                        # print(f"Error: User {user}: Failed to find enough negative samples. Current count: {len(available_neg_items)}")
+                        break  # 무한 루프 방지
+
+            # print(f"User {user}: Selecting 99 negative samples from {len(available_neg_items)} available neg items")
+            test_neg_items = random.sample(available_neg_items, min(99, len(available_neg_items)))
+
+            self.test_data[user] = {
+                'pos_item': test_pos_item,
+                'neg_items': test_neg_items
+            }
+            log_entry = {
+                'user': user,
+                'pos_item': test_pos_item,
+                'neg_items': len(test_neg_items)
+            }
+            # 로그 저장
+            with open(log_file, 'a') as f:
+                f.write(json.dumps(log_entry) + '\n')
+
+
     def find_items(self, user, items, n, find_similar=True):
         user = user.item() if isinstance(user, torch.Tensor) else user
         items = [item.item() if isinstance(item, torch.Tensor) else item for item in items]
@@ -264,7 +397,7 @@ class MovieLens(torch.utils.data.Dataset):
         item_scores = []
         for item in items:
             if item not in self.item_to_ann_index:
-                continue  # Skip items with 0-dimension feature vector
+                continue
 
             item_idx = self.item_to_ann_index[item]
             similar_items = self.ann_index.get_nns_by_item(item_idx, n + len(user_items))
@@ -272,38 +405,39 @@ class MovieLens(torch.utils.data.Dataset):
             for sim_idx in similar_items:
                 candidate = self.ann_index_to_item[sim_idx]
                 if candidate in candidate_items:
-                    similarity = 1 - self.ann_index.get_distance(item_idx, sim_idx) / 2  # convert angular distance to similarity
+                    similarity = 1 - self.ann_index.get_distance(item_idx, sim_idx) / 2
                     score = similarity if find_similar else 1 - similarity
                     item_scores.append((candidate, score))
         
         item_scores.sort(key=lambda x: x[1], reverse=True)
         return [item for item, _ in item_scores[:n]]
 
-    def prepare_train_pairs(self):
-        print('Preparing training pairs...')
-        self.train_pairs = []
-        for user in tqdm(self.user_pos_items.keys(), desc="Preparing training pairs"):
-        # for user in self.user_pos_items.keys():
-            pos_items = self.user_pos_items[user]
-            neg_items = self.user_neg_items[user]
-            for pos_item in pos_items:
-                for _ in range(self.num_negative_samples):
-                    neg_item = random.choice(neg_items)
-                    self.train_pairs.append((user, pos_item, neg_item))
-
     def __len__(self):
-        return len(self.train_pairs)
+        return len(self.train_data)
 
     def __getitem__(self, idx):
-        user, pos_item, neg_item = self.train_pairs[idx]
-        pos_edge = torch.tensor([user, pos_item])
-        neg_edge = torch.tensor([user, neg_item])
-        return {'pos_edge': pos_edge, 'neg_edge': neg_edge}
+        user, pos_item, neg_item = self.train_data[idx]
+        return {'user': user, 'pos_item': pos_item, 'neg_item': neg_item}
+
+    def get_test_samples(self, user):
+        if user not in self.test_data:
+            return None
+        
+        pos_item = self.test_data[user]['pos_item']
+        neg_items = self.test_data[user]['neg_items']
+        
+        test_items = [pos_item] + neg_items
+        labels = torch.zeros(len(test_items), dtype=torch.long)
+        labels[0] = 1  # 첫 번째 아이템이 양성 샘플
+        
+        return torch.tensor([user] * len(test_items)), torch.tensor(test_items), labels
 
     def collate_fn(self, batch):
-        pos_edges = torch.stack([item['pos_edge'] for item in batch], dim=1)
-        neg_edges = torch.stack([item['neg_edge'] for item in batch], dim=1)
+        users = torch.tensor([item['user'] for item in batch])
+        pos_items = torch.tensor([item['pos_item'] for item in batch])
+        neg_items = torch.tensor([item['neg_item'] for item in batch])
         return {
-            'pos_edge_index': pos_edges,
-            'neg_edge_index': neg_edges
+            'users': users,
+            'pos_items': pos_items,
+            'neg_items': neg_items
         }
