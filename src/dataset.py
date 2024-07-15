@@ -193,12 +193,12 @@ class MovieLens(torch.utils.data.Dataset):
     
     def build_ann_index(self):
         print('Building Annoy index...')
-        ann_index_file = os.path.join(self.root, f'ann_index_{self.name}.ann')
-        ann_mapping_file = os.path.join(self.root, f'ann_mapping_{self.name}.pkl')
+        ann_index_file = os.path.join(self.root, f'ann_index_{self.name}_euclidean.ann')
+        ann_mapping_file = os.path.join(self.root, f'ann_mapping_{self.name}_euclidean.pkl')
 
         if os.path.exists(ann_index_file) and os.path.exists(ann_mapping_file):
             print('Loading existing Annoy index...')
-            self.ann_index = AnnoyIndex(1128, 'angular')
+            self.ann_index = AnnoyIndex(1128, 'euclidean')  # 'angular'에서 'euclidean'으로 변경
             self.ann_index.load(ann_index_file)
             with open(ann_mapping_file, 'rb') as f:
                 mappings = pickle.load(f)
@@ -206,7 +206,7 @@ class MovieLens(torch.utils.data.Dataset):
             self.ann_index_to_item = mappings['ann_index_to_item']
         else:
             print('Building new Annoy index...')
-            self.ann_index = AnnoyIndex(1128, 'angular')
+            self.ann_index = AnnoyIndex(1128, 'euclidean')  # 'angular'에서 'euclidean'으로 변경
             self.item_to_ann_index = {}
             self.ann_index_to_item = {}
             ann_index = 0
@@ -315,7 +315,7 @@ class MovieLens(torch.utils.data.Dataset):
                     if not additional_neg_items and len(neg_items) > 0:
                         # print(f"User {user}: No more negative samples for positive item {pos_item}")
                         # print(f"Finding similar items for negative samples with {len(neg_items)} items")
-                        additional_neg_items = self.find_items(user, neg_items, self.num_negative_samples - len(neg_samples_for_pos), find_similar=True)
+                        additional_neg_items = self.find_items(user, neg_items, (self.num_negative_samples - len(neg_samples_for_pos)) + 10, find_similar=True)
                         additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items]
                         # print(f"User {user}: Found {len(additional_neg_items)} similar items for negative samples")
 
@@ -323,7 +323,9 @@ class MovieLens(torch.utils.data.Dataset):
                         neg_samples_for_pos.extend(additional_neg_items[:self.num_negative_samples - len(neg_samples_for_pos)])
                     else:
                         # print("No more negative samples for user")
-                        additional_neg_items = self.find_items(user, pos_items, self.num_negative_samples - len(neg_samples_for_pos), find_similar=False)
+                        # print(f"Negative samples for positive item {pos_item}: {neg_samples_for_pos}")
+                        additional_neg_items = self.find_items(user, pos_items, (self.num_negative_samples - len(neg_samples_for_pos)) + 10, find_similar=False)
+                        # print(f"User {user}: Found similar items : {additional_neg_items} for negative samples")
                         additional_neg_items = [item for item in additional_neg_items if item not in user_interacted_items]
                         # print(f"User {user}: Found {len(additional_neg_items)} similar items for negative samples")
                         neg_samples_for_pos.extend(additional_neg_items[:self.num_negative_samples - len(neg_samples_for_pos)])
@@ -358,7 +360,7 @@ class MovieLens(torch.utils.data.Dataset):
                 if not new_items:
                     # print(f"Warning: User {user}: Could not find new negative samples. Trying with different strategy.")
                     # 다른 전략 시도
-                    additional_items = self.find_items(user, neg_items, num_additional_needed, find_similar=True)
+                    additional_items = self.find_items(user, neg_items, num_additional_needed + 10, find_similar=True)
                     new_items = [item for item in additional_items 
                                 if item not in user_interacted_items 
                                 and item not in train_neg_items 
@@ -398,18 +400,17 @@ class MovieLens(torch.utils.data.Dataset):
         for item in items:
             if item not in self.item_to_ann_index:
                 continue
-
             item_idx = self.item_to_ann_index[item]
             similar_items = self.ann_index.get_nns_by_item(item_idx, n + len(user_items))
             
             for sim_idx in similar_items:
                 candidate = self.ann_index_to_item[sim_idx]
                 if candidate in candidate_items:
-                    similarity = 1 - self.ann_index.get_distance(item_idx, sim_idx) / 2
-                    score = similarity if find_similar else 1 - similarity
+                    distance = self.ann_index.get_distance(item_idx, sim_idx)
+                    score = 1 / (1 + distance) if find_similar else distance  # 유클리디안 거리에 맞게 스코어 계산 방식 변경
                     item_scores.append((candidate, score))
         
-        item_scores.sort(key=lambda x: x[1], reverse=True)
+        item_scores.sort(key=lambda x: x[1], reverse=find_similar)
         return [item for item, _ in item_scores[:n]]
 
     def __len__(self):
