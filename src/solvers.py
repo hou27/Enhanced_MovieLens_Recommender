@@ -121,6 +121,8 @@ class Solver:
                 continue
 
             users, items, labels = test_samples
+            if len(users) < 30:
+                continue
             users = users.to(self.train_args['device'])
             items = items.to(self.train_args['device'])
             labels = labels.to(self.train_args['device'])

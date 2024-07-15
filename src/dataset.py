@@ -337,12 +337,12 @@ class MovieLens(torch.utils.data.Dataset):
 
             # print(f"User {user}: {len(train_neg_items)} negative samples for positive items")
             # 테스트 데이터 준비
-            available_neg_items = list(user_interacted_items - train_neg_items)
+            available_neg_items = list(set(neg_items) - train_neg_items)
 
             # 필요한 추가 음성 샘플 수 계산
-            num_additional_needed = max(0, 99 - len(available_neg_items))
+            num_additional_needed = max(0, self.num_neg_candidates - len(available_neg_items))
 
-            while len(available_neg_items) < 99:
+            while len(available_neg_items) < self.num_neg_candidates:
                 # print(f"User {user}: Finding {num_additional_needed} additional negative samples")
                 additional_items = self.find_items(user, [test_pos_item], num_additional_needed, find_similar=False)
                 
@@ -355,7 +355,7 @@ class MovieLens(torch.utils.data.Dataset):
                 available_neg_items.extend(new_items)
                 
                 # 아직 99개를 채우지 못했다면 다시
-                num_additional_needed = 99 - len(available_neg_items)
+                num_additional_needed = self.num_neg_candidates - len(available_neg_items)
                 
                 if not new_items:
                     # print(f"Warning: User {user}: Could not find new negative samples. Trying with different strategy.")
@@ -371,8 +371,8 @@ class MovieLens(torch.utils.data.Dataset):
                         # print(f"Error: User {user}: Failed to find enough negative samples. Current count: {len(available_neg_items)}")
                         break  # 무한 루프 방지
 
-            # print(f"User {user}: Selecting 99 negative samples from {len(available_neg_items)} available neg items")
-            test_neg_items = random.sample(available_neg_items, min(99, len(available_neg_items)))
+            # print(f"User {user}: Selecting 99(num_neg_candidates) negative samples from {len(available_neg_items)} available neg items")
+            test_neg_items = random.sample(available_neg_items, min(self.num_neg_candidates, len(available_neg_items)))
 
             self.test_data[user] = {
                 'pos_item': test_pos_item,
@@ -381,7 +381,9 @@ class MovieLens(torch.utils.data.Dataset):
             log_entry = {
                 'user': user,
                 'pos_item': test_pos_item,
-                'neg_items': len(test_neg_items)
+                'neg_items': len(test_neg_items),
+                # 'test_items': f"{test_neg_items}",
+                # 'interacted_items': f"{user_interacted_items}",
             }
             # 로그 저장
             with open(log_file, 'a') as f:
