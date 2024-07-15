@@ -58,7 +58,7 @@ def update_pea_graph_input(dataset_args, train_args, data):
 
 class PEAGATChannel(nn.Module):
     def __init__(self, in_dim, out_dim, repr_dim, num_steps, num_heads, dropout):
-        super(PEAGATChannel, self).__init__()
+        super().__init__()
         self.num_steps = num_steps
         self.gnn_layers = nn.ModuleList()
         if num_steps > 1:
@@ -101,7 +101,6 @@ class PEAGATRecsysModel(nn.Module):
         self.meta_path_steps = meta_path_steps.split(",")
         self.if_use_features = if_use_features
         self.num_layers = num_layers
-        self.l2_coeff = 1e-5
 
         if not self.if_use_features:
             self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
@@ -163,9 +162,10 @@ class PEAGATRecsysModel(nn.Module):
         return x
 
     def predict(self, edge_index):
-        x = self.forward()
-        u_repr = x[edge_index[0]]
-        i_repr = x[edge_index[1]]
+        if self.training:
+            self.cache_repr = self.forward()
+        u_repr = self.cache_repr[edge_index[0]]
+        i_repr = self.cache_repr[edge_index[1]]
         x = torch.cat([u_repr, i_repr], dim=-1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
@@ -176,10 +176,13 @@ class PEAGATRecsysModel(nn.Module):
         """
         Bayesian Personalized Ranking loss
         """
-        return -torch.log(torch.sigmoid(pos_preds - neg_preds)).mean()
+        return -torch.log(torch.sigmoid(pos_preds - neg_preds) + 1e-10).sum() # mean()
     
     def loss(self, pos_edge_index, neg_edge_index):
         pos_pred = self.predict(pos_edge_index)
         neg_pred = self.predict(neg_edge_index)
+        # print(f"Pos pred: {pos_pred}, Neg pred: {neg_pred}")
+        loss = self.bpr_loss(pos_pred, neg_pred)
+        # print(f"Loss: {loss}")
 
-        return self.bpr_loss(pos_pred, neg_pred)
+        return loss

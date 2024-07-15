@@ -63,8 +63,9 @@ class Solver:
 
     def train(self, optimizer):
         self.model.train()
-        total_loss = 0
-        total_samples = 0
+        # total_loss = 0
+        # total_samples = 0
+        total_loss = []
 
         # 시드 고정 코드 추가
         seed = 2019
@@ -94,17 +95,17 @@ class Solver:
             pos_edge_index = torch.stack([users, pos_items])
             neg_edge_index = torch.stack([users, neg_items])
 
+            optimizer.zero_grad() # 각 배치마다 새로운 그래디언트 계산
             loss = self.model.loss(pos_edge_index, neg_edge_index)
             loss.backward()
             optimizer.step()
             
-            batch_size = users.size(0)  # 양성 + 음성 샘플 수
-            total_loss += float(loss) * batch_size
-            total_samples += batch_size
+            total_loss.append(loss.detach().cpu().item())
+            train_loss = np.mean(total_loss)
 
-            train_bar.set_postfix(loss=f"{total_loss / total_samples:.4f}")
+            train_bar.set_postfix(loss=f"{train_loss:.4f}")
 
-        return total_loss / total_samples
+        return train_loss
 
     @torch.no_grad()
     def test(self):
@@ -133,4 +134,4 @@ class Solver:
 
             test_bar.set_postfix(HR10=f"{sum(hits) / len(hits):.4f}")
 
-        return sum(hits) / len(hits)  # This is HR@10
+        return sum(hits) / len(hits)  # HR@10

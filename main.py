@@ -76,7 +76,6 @@ print('Train params:', train_args)
 
 if __name__ == '__main__':
     dataset = MovieLens(**dataset_args)
-    # model = PEAGATRecsysModel(dataset.data, **model_args)
     model = PEAGATRecsysModel(dataset.data, **model_args, dataset_args=dataset_args, train_args=train_args)
     solver = Solver(model, dataset, train_args)
     solver.run()
