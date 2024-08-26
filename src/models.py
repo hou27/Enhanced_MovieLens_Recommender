@@ -103,7 +103,8 @@ class PEAGATRecsysModel(nn.Module):
         self.num_layers = num_layers
 
         if not self.if_use_features:
-            self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
+            self.embeddings = Parameter(torch.Tensor(data["num_nodes"], hidden_dim))
+            # self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
 
         self.meta_path_edge_index_list = update_pea_graph_input(dataset_args, train_args, data)
         for i, edge_indices in enumerate(self.meta_path_edge_index_list):
@@ -138,7 +139,7 @@ class PEAGATRecsysModel(nn.Module):
 
     def forward(self, metapath_idx=None):
         if not self.if_use_features:
-            x = self.embeddings.weight
+            x = self.embeddings
         else:
             raise NotImplementedError("Feature-based model not implemented")
 
@@ -162,8 +163,6 @@ class PEAGATRecsysModel(nn.Module):
         return x
 
     def predict(self, edge_index):
-        if self.training:
-            self.cache_repr = self.forward()
         u_repr = self.cache_repr[edge_index[0]]
         i_repr = self.cache_repr[edge_index[1]]
         x = torch.cat([u_repr, i_repr], dim=-1)
@@ -179,6 +178,8 @@ class PEAGATRecsysModel(nn.Module):
         return -torch.log(torch.sigmoid(pos_preds - neg_preds) + 1e-10).sum() # mean()
     
     def loss(self, pos_edge_index, neg_edge_index):
+        if self.training:
+            self.cache_repr = self.forward()
         pos_pred = self.predict(pos_edge_index)
         neg_pred = self.predict(neg_edge_index)
         # print(f"Pos pred: {pos_pred}, Neg pred: {neg_pred}")

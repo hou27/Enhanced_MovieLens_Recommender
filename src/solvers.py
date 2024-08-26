@@ -107,16 +107,46 @@ class Solver:
 
         return train_loss
 
+    # @torch.no_grad()
+    # def test(self):
+    #     self.model.eval()
+
+    #     hits = []
+    #     all_users = list(self.dataset.test_data.keys())
+    #     test_bar = tqdm.tqdm(all_users, total=len(all_users), desc="Testing")
+        
+    #     for user in test_bar:
+    #         test_samples = self.dataset.get_test_samples(user)
+    #         if test_samples is None:
+    #             continue
+
+    #         users, items, labels = test_samples
+    #         if len(users) < 30:
+    #             continue
+    #         users = users.to(self.train_args['device'])
+    #         items = items.to(self.train_args['device'])
+    #         labels = labels.to(self.train_args['device'])
+
+    #         edge_index = torch.stack([users, items])
+    #         predictions = self.model.predict(edge_index)
+            
+    #         _, indices = torch.topk(predictions, 10)
+    #         hit = torch.any(labels[indices] == 1).item()
+    #         hits.append(hit)
+
+    #         test_bar.set_postfix(HR10=f"{sum(hits) / len(hits):.4f}")
+
+    #     return sum(hits) / len(hits)  # HR@10
     @torch.no_grad()
     def test(self):
         self.model.eval()
 
         hits = []
-        all_users = list(self.dataset.test_data.keys())
+        all_users = list(self.dataset.data['test_pos_unid_inid_map'].keys())
         test_bar = tqdm.tqdm(all_users, total=len(all_users), desc="Testing")
         
-        for user in test_bar:
-            test_samples = self.dataset.get_test_samples(user)
+        for unid in test_bar:
+            test_samples = self.dataset.get_test_samples(unid)
             if test_samples is None:
                 continue
 
