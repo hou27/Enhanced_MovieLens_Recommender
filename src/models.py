@@ -36,7 +36,7 @@ def update_pea_graph_input(dataset_args, train_args, data):
             # [item2genre_edge_index, genre2item_edge_index],  # I-G-I
             [item2tag_edge_index, tag2item_edge_index],  # I-T-I
             [user2tag_edge_index, tag2item_edge_index],  # U-T-I
-            # [tag2user_edge_index, user2item_edge_index],  # T-U-I
+            [tag2user_edge_index, user2item_edge_index],  # T-U-I
         ]
 
         # print("Print sample meta path edge indices:")

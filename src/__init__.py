@@ -1,5 +1,6 @@
 from .dataset import MovieLens
-from .models import PEAGATRecsysModel
+# from .models import PEAGATRecsysModel
+from .test_model import PEAGATRecsysModel
 from .solvers import Solver
 from .utils import get_folder_path
 

@@ -741,7 +741,7 @@ class MovieLens(torch.utils.data.Dataset):
     def __len__(self):
         return self.train_data_length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx):        
         if not hasattr(self, 'train_data'):
             self.cf_negative_sampling()
         
@@ -766,7 +766,7 @@ class MovieLens(torch.utils.data.Dataset):
         if not neg_inids:
             return None
         
-        test_inids = [pos_inid] + random.sample(neg_inids, min(len(neg_inids), self.num_neg_candidates - 1))
+        test_inids = [pos_inid] + random.sample(neg_inids, self.num_neg_candidates)# min(len(neg_inids), self.num_neg_candidates - 1))
         labels = torch.zeros(len(test_inids), dtype=torch.long)
         labels[0] = 1  # 첫 번째 아이템이 양성 샘플
         

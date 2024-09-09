@@ -62,21 +62,21 @@ class Solver:
 
 
     def train(self, optimizer):
-        self.model.train()
-        # total_loss = 0
-        # total_samples = 0
-        total_loss = []
-
         # 시드 고정 코드 추가
         seed = 2019
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        # if torch.cuda.is_available():
+        #     torch.cuda.manual_seed(seed)
+        #     torch.cuda.manual_seed_all(seed)
+        # torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.benchmark = False
+
+        self.model.train()
+        # total_loss = 0
+        # total_samples = 0
+        total_loss = []
 
         self.dataset.cf_negative_sampling()
 
@@ -161,6 +161,8 @@ class Solver:
 
             edge_index = torch.stack([users, items])
             predictions = self.model.predict(edge_index)
+            # print(predictions)
+            # print(len(predictions))
             
             _, indices = torch.topk(predictions, 10)
             hit = torch.any(labels[indices] == 1).item()
