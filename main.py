@@ -19,7 +19,7 @@ parser.add_argument('--num_layers', type=int, default=2, help='')
 parser.add_argument('--num_heads', type=int, default=1, help='')
 parser.add_argument('--dropout', type=float, default=0.1, help='')
 parser.add_argument('--channel_aggr', type=str, default='att', help='')
-parser.add_argument('--meta_path_steps', type=str, default='2,2,2,2,2,2,2,2,2,2,2,2,2', help='')	# 2,2,2,2,2,2,2,2,2,2,2,2,2(for 25m)
+parser.add_argument('--meta_path_steps', type=str, default='2,2,2,2,2,2,2,2,2', help='')	# 2,2,2,2,2,2,2,2,2,2,2,2,2(for 25m)
 
 # Train params
 parser.add_argument('--device', type=str, default='cuda', help='')

@@ -78,6 +78,8 @@ class Solver:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
+        self.dataset.cf_negative_sampling()
+
         loader = DataLoader(
             self.dataset,
             shuffle=True,
