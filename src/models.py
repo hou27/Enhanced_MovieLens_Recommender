@@ -32,11 +32,11 @@ def update_pea_graph_input(dataset_args, train_args, data):
             
             # 아이템(영화) 중심 메타 패스
             [item2user_edge_index, user2item_edge_index],  # I-U-I
-            [item2year_edge_index, year2item_edge_index],  # I-Y-I
-            [item2genre_edge_index, genre2item_edge_index],  # I-G-I
+            # [item2year_edge_index, year2item_edge_index],  # I-Y-I
+            # [item2genre_edge_index, genre2item_edge_index],  # I-G-I
             [item2tag_edge_index, tag2item_edge_index],  # I-T-I
             [user2tag_edge_index, tag2item_edge_index],  # U-T-I
-            [tag2user_edge_index, user2item_edge_index],  # T-U-I
+            # [tag2user_edge_index, user2item_edge_index],  # T-U-I
         ]
 
         # print("Print sample meta path edge indices:")
@@ -49,7 +49,7 @@ def update_pea_graph_input(dataset_args, train_args, data):
             item2genome_tag_edge_index = genome_tag2item_edge_index.flip([0])
             meta_path_edge_indices.extend([
                 [genome_tag2item_edge_index, item2user_edge_index],  # GT-I-U
-                [item2genome_tag_edge_index, genome_tag2item_edge_index],  # I-GT-I
+                # [item2genome_tag_edge_index, genome_tag2item_edge_index],  # I-GT-I
             ])
 
         return meta_path_edge_indices
