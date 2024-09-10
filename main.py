@@ -81,9 +81,9 @@ class PEAGATRecsysModel(PEAGATRecsysModel):
 
 if __name__ == '__main__':
     dataset = MovieLens(**dataset_args)
-    model_args['num_nodes'] = dataset.data["num_nodes"]
-    model_args['dataset'] = dataset
+    
     # model = PEAGATRecsysModel(dataset.data, **model_args, dataset_args=dataset_args, train_args=train_args)
-    model = PEAGATRecsysModel(**model_args)
-    solver = Solver(model, dataset, train_args)
+    # model = PEAGATRecsysModel(**model_args)
+    # solver = Solver(model, dataset, train_args)
+    solver = Solver(PEAGATRecsysModel, dataset, model_args, train_args)
     solver.run()

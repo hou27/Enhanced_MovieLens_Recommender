@@ -13,22 +13,31 @@ def print_memory_usage():
     print(f"Memory usage: {process.memory_info().rss / 1024 ** 2} MB")
 
 class Solver:
-    def __init__(self, model, dataset, train_args):
-        self.model = model
+    def __init__(self, model_class, dataset, model_args, train_args):
+        self.model_class = model_class
         self.dataset = dataset
+        self.model_args = model_args
         self.train_args = train_args
-        self.num_layers = getattr(model, 'num_layers', 2)
+        # self.num_layers = getattr(model, 'num_layers', 2)
         self.log_dir = os.path.join('logs', datetime.now().strftime('%Y%m%d_%H%M%S'))
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file = os.path.join(self.log_dir, 'training_log.jsonl')
         self.best_hr10 = 0
 
     def run(self):
-        device = self.train_args['device']
-        self.model = self.model.to(device)
-
         for run in range(self.train_args['runs']):
-            self.model.reset_parameters()
+            # 시드 고정 코드 추가
+            seed = 2019 + run
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+
+            device = self.train_args['device']
+            self.model_args['num_nodes'] = self.dataset.data["num_nodes"]
+            self.model_args['dataset'] = self.dataset
+            self.model = self.model_class(**self.model_args).to(device)
+
+            # self.model.reset_parameters()
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.train_args['lr'],
                                          weight_decay=self.train_args['weight_decay'])
 
@@ -62,11 +71,11 @@ class Solver:
 
 
     def train(self, optimizer):
-        # 시드 고정 코드 추가
-        seed = 2019
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
+        # # 시드 고정 코드 추가
+        # seed = 2019
+        # random.seed(seed)
+        # np.random.seed(seed)
+        # torch.manual_seed(seed)
         # if torch.cuda.is_available():
         #     torch.cuda.manual_seed(seed)
         #     torch.cuda.manual_seed_all(seed)
