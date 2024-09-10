@@ -33,9 +33,9 @@ class Solver:
             torch.manual_seed(seed)
 
             device = self.train_args['device']
-            self.model_args['num_nodes'] = self.dataset.data["num_nodes"]
-            self.model_args['dataset'] = self.dataset
-            self.model = self.model_class(**self.model_args).to(device)
+            # self.model_args['num_nodes'] = self.dataset.data["num_nodes"]
+            # self.model_args['dataset'] = self.dataset
+            self.model = self.model_class(self.dataset, **self.model_args, train_args=self.train_args).to(device)
 
             # self.model.reset_parameters()
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.train_args['lr'],

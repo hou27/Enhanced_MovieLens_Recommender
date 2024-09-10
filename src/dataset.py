@@ -432,6 +432,7 @@ class MovieLens(torch.utils.data.Dataset):
     def __init__(self, root, name, num_core, num_negative_samples=4, num_neg_candidates=99, type=None):
         self.root = root
         self.name = name
+        self.type = type
         self.num_negative_samples = num_negative_samples
         self.num_neg_candidates = num_neg_candidates
         self.data = self.process()

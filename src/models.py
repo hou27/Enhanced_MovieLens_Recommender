@@ -6,8 +6,9 @@ from torch_geometric.nn import GATConv
 from torch import Tensor
 from torch_geometric.nn.inits import glorot
 
-def update_pea_graph_input(dataset_args, train_args, data):
-    if dataset_args['name'] == "Movielens":
+def update_pea_graph_input(dataset, train_args):
+    if dataset.name == "Movielens":
+        data = dataset.data
         device = train_args['device']
         
         user2item_edge_index = data['user', 'rates', 'movie']['edge_index'].to(device)
@@ -44,7 +45,7 @@ def update_pea_graph_input(dataset_args, train_args, data):
         #     print(f"Meta path {idx}: {edge_indices[0].shape} - {edge_indices[1].shape}")
         #     print(f"Meta path {idx}: {edge_indices}")
 
-        if dataset_args['type'] == "25m":
+        if dataset.type == "25m":
             genome_tag2item_edge_index = data['genome_tag', 'describes', 'movie']['edge_index'].to(device)
             item2genome_tag_edge_index = genome_tag2item_edge_index.flip([0])
             meta_path_edge_indices.extend([
@@ -93,8 +94,9 @@ class PEAGATChannel(nn.Module):
         return x
 
 class PEAGATRecsysModel(nn.Module):
-    def __init__(self, data, hidden_dim, repr_dim, num_layers, num_heads, dropout, channel_aggr, meta_path_steps, if_use_features=False, dataset_args=None, train_args=None):
+    def __init__(self, dataset, hidden_dim, repr_dim, num_layers, num_heads, dropout, channel_aggr, meta_path_steps, if_use_features=False, train_args=None):
         super().__init__()
+        self.data = dataset.data
         self.hidden_dim = hidden_dim
         self.repr_dim = repr_dim
         self.channel_aggr = channel_aggr
@@ -103,15 +105,15 @@ class PEAGATRecsysModel(nn.Module):
         self.num_layers = num_layers
 
         if not self.if_use_features:
-            self.embeddings = Parameter(torch.Tensor(data["num_nodes"], hidden_dim))
+            self.embeddings = Parameter(torch.Tensor(self.data["num_nodes"], hidden_dim))
             # self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
 
-        self.meta_path_edge_index_list = update_pea_graph_input(dataset_args, train_args, data)
+        self.meta_path_edge_index_list = update_pea_graph_input(dataset, train_args)
         for i, edge_indices in enumerate(self.meta_path_edge_index_list):
             # print(f"Meta-path {i}:")
             for j, edge_index in enumerate(edge_indices):
                 # print(f"  Step {j}: max index = {edge_index.max().item()}, shape = {edge_index.shape}")
-                if edge_index.max() >= data["num_nodes"]:
+                if edge_index.max() >= self.data["num_nodes"]:
                     print(f"Warning: Meta-path {i}, Step {j} contains index larger than number of nodes")
 
         self.pea_channels = nn.ModuleList()

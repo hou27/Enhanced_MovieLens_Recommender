@@ -1,5 +1,5 @@
 import argparse
-from src.models import update_pea_graph_input
+# from src.models import update_pea_graph_input
 import torch
 
 from src import MovieLens, PEAGATRecsysModel, Solver
@@ -75,9 +75,9 @@ print('Dataset params:', dataset_args)
 print('Model params:', model_args)
 print('Train params:', train_args)
 
-class PEAGATRecsysModel(PEAGATRecsysModel):
-    def update_graph_input(self, dataset):
-        return update_pea_graph_input(dataset_args, train_args, dataset.data)
+# class PEAGATRecsysModel(PEAGATRecsysModel):
+#     def update_graph_input(self, dataset):
+#         return update_pea_graph_input(dataset_args, train_args, dataset.data)
 
 if __name__ == '__main__':
     dataset = MovieLens(**dataset_args)
