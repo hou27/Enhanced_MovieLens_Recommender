@@ -675,8 +675,10 @@ class MovieLens(torch.utils.data.Dataset):
 
             # 별점 4점 이상인 아이템을 positive로 간주
             pos_items = uid_iids[uid_ratings_values >= 4]
-            # 별점 4점 미만인 아이템을 negative로 간주
-            explicit_neg_items = uid_iids[uid_ratings_values < 4]
+            # # 별점 4점 미만인 아이템을 negative로 간주
+            # explicit_neg_items = uid_iids[uid_ratings_values < 4]
+            # 별점 2점 이하인 아이템을 negative로 간주
+            explicit_neg_items = uid_iids[uid_ratings_values <= 2]
             
             # Unobserved 아이템들 (사용자가 평가하지 않은 모든 아이템)
             unobserved_items = list(all_items - set(uid_iids))
