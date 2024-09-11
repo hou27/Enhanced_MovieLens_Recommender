@@ -69,6 +69,8 @@ class PEAGATChannel(nn.Module):
             self.gnn_layers.append(GATConv(out_dim, repr_dim, heads=num_heads, dropout=dropout))
         else:
             self.gnn_layers.append(GATConv(in_dim, repr_dim, heads=num_heads, dropout=dropout))
+
+        self.reset_parameters()
     
     def reset_parameters(self):
         for layer in self.gnn_layers:
