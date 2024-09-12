@@ -33,11 +33,11 @@ class Solver:
             torch.manual_seed(seed)
 
             device = self.train_args['device']
-            # self.model_args['num_nodes'] = self.dataset.data["num_nodes"]
-            # self.model_args['dataset'] = self.dataset
-            self.model = self.model_class(self.dataset, **self.model_args, train_args=self.train_args).to(device)
+            self.model_args['num_nodes'] = self.dataset.data["num_nodes"]
+            self.model_args['dataset'] = self.dataset
+            self.model_args['train_args'] = self.train_args
+            self.model = self.model_class(**self.model_args).to(device)
 
-            # self.model.reset_parameters()
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.train_args['lr'],
                                          weight_decay=self.train_args['weight_decay'])
 
@@ -71,17 +71,6 @@ class Solver:
 
 
     def train(self, optimizer):
-        # # 시드 고정 코드 추가
-        # seed = 2019
-        # random.seed(seed)
-        # np.random.seed(seed)
-        # torch.manual_seed(seed)
-        # if torch.cuda.is_available():
-        #     torch.cuda.manual_seed(seed)
-        #     torch.cuda.manual_seed_all(seed)
-        # torch.backends.cudnn.deterministic = True
-        # torch.backends.cudnn.benchmark = False
-
         self.model.train()
         # total_loss = 0
         # total_samples = 0
@@ -117,37 +106,7 @@ class Solver:
             train_bar.set_postfix(loss=f"{train_loss:.4f}")
 
         return train_loss
-
-    # @torch.no_grad()
-    # def test(self):
-    #     self.model.eval()
-
-    #     hits = []
-    #     all_users = list(self.dataset.test_data.keys())
-    #     test_bar = tqdm.tqdm(all_users, total=len(all_users), desc="Testing")
-        
-    #     for user in test_bar:
-    #         test_samples = self.dataset.get_test_samples(user)
-    #         if test_samples is None:
-    #             continue
-
-    #         users, items, labels = test_samples
-    #         if len(users) < 30:
-    #             continue
-    #         users = users.to(self.train_args['device'])
-    #         items = items.to(self.train_args['device'])
-    #         labels = labels.to(self.train_args['device'])
-
-    #         edge_index = torch.stack([users, items])
-    #         predictions = self.model.predict(edge_index)
-            
-    #         _, indices = torch.topk(predictions, 10)
-    #         hit = torch.any(labels[indices] == 1).item()
-    #         hits.append(hit)
-
-    #         test_bar.set_postfix(HR10=f"{sum(hits) / len(hits):.4f}")
-
-    #     return sum(hits) / len(hits)  # HR@10
+    
     @torch.no_grad()
     def test(self):
         self.model.eval()
@@ -170,8 +129,6 @@ class Solver:
 
             edge_index = torch.stack([users, items])
             predictions = self.model.predict(edge_index)
-            # print(predictions)
-            # print(len(predictions))
             
             _, indices = torch.topk(predictions, 10)
             hit = torch.any(labels[indices] == 1).item()

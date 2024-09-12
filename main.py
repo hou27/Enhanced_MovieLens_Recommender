@@ -1,5 +1,5 @@
 import argparse
-# from src.models import update_pea_graph_input
+from src.models import update_pea_graph_input
 import torch
 
 from src import MovieLens, PEAGATRecsysModel, Solver
@@ -18,7 +18,7 @@ parser.add_argument('--hidden_dim', type=int, default=64, help='')
 parser.add_argument('--repr_dim', type=int, default=16, help='')
 parser.add_argument('--num_layers', type=int, default=2, help='')
 parser.add_argument('--num_heads', type=int, default=1, help='')
-parser.add_argument('--dropout', type=float, default=0.1, help='')
+parser.add_argument('--dropout', type=float, default=0, help='')
 parser.add_argument('--channel_aggr', type=str, default='att', help='')
 parser.add_argument('--meta_path_steps', type=str, default='2,2,2,2,2,2,2,2,2,2', help='')	# 2,2,2,2,2,2,2,2,2,2,2,2,2(for 25m)
 
@@ -75,15 +75,8 @@ print('Dataset params:', dataset_args)
 print('Model params:', model_args)
 print('Train params:', train_args)
 
-# class PEAGATRecsysModel(PEAGATRecsysModel):
-#     def update_graph_input(self, dataset):
-#         return update_pea_graph_input(dataset_args, train_args, dataset.data)
-
 if __name__ == '__main__':
     dataset = MovieLens(**dataset_args)
-    
-    # model = PEAGATRecsysModel(dataset.data, **model_args, dataset_args=dataset_args, train_args=train_args)
-    # model = PEAGATRecsysModel(**model_args)
-    # solver = Solver(model, dataset, train_args)
+
     solver = Solver(PEAGATRecsysModel, dataset, model_args, train_args)
     solver.run()

@@ -75,30 +75,20 @@ class PEAGATChannel(nn.Module):
     def reset_parameters(self):
         for layer in self.gnn_layers:
             layer.reset_parameters()
+    
     def forward(self, x, edge_index_list):
         assert len(edge_index_list) == self.num_steps
-        for step_idx in range(self.num_steps):
-            edge_index = edge_index_list[step_idx]
-            # print(f"Step {step_idx}: x shape = {x.shape}, edge_index shape = {edge_index.shape}")
-            # print(f"Step {step_idx}: max node index in x = {x.shape[0] - 1}, max index in edge_index = {edge_index.max().item()}")
-            
-            # 엣지 인덱스 유효성 검사
-            if edge_index.max() >= x.size(0):
-                print(f"Error in step {step_idx}: Edge index {edge_index.max().item()} exceeds number of nodes {x.size(0)}")
-                problematic_indices = torch.where(edge_index >= x.size(0))[0]
-                print(f"Problematic indices: {problematic_indices}")
-                print(f"Problem path edges: {edge_index[:, problematic_indices]}")
-                raise ValueError(f"Edge index out of bounds in step {step_idx}")
 
-            x = self.gnn_layers[step_idx](x, edge_index)
-            if step_idx < self.num_steps - 1:
-                x = F.relu(x)
+        for step_idx in range(self.num_steps - 1):
+            x = F.relu(self.gnn_layers[step_idx](x, edge_index_list[step_idx]))
+        x = self.gnn_layers[-1](x, edge_index_list[-1])
         return x
 
 class PEAGATRecsysModel(nn.Module):
-    def __init__(self, dataset, hidden_dim, repr_dim, num_layers, num_heads, dropout, channel_aggr, meta_path_steps, if_use_features=False, train_args=None):
+    def __init__(self, dataset, num_nodes, hidden_dim, repr_dim, num_layers, num_heads, dropout, channel_aggr, meta_path_steps, if_use_features=False, train_args=None):
         super().__init__()
         self.data = dataset.data
+        self.num_nodes = num_nodes
         self.hidden_dim = hidden_dim
         self.repr_dim = repr_dim
         self.channel_aggr = channel_aggr
@@ -107,15 +97,14 @@ class PEAGATRecsysModel(nn.Module):
         self.num_layers = num_layers
 
         if not self.if_use_features:
-            self.embeddings = Parameter(torch.Tensor(self.data["num_nodes"], hidden_dim))
-            # self.embeddings = nn.Embedding(data["num_nodes"], hidden_dim)
+            self.embeddings = Parameter(torch.Tensor(self.num_nodes, hidden_dim))
 
         self.meta_path_edge_index_list = update_pea_graph_input(dataset, train_args)
         for i, edge_indices in enumerate(self.meta_path_edge_index_list):
             # print(f"Meta-path {i}:")
             for j, edge_index in enumerate(edge_indices):
                 # print(f"  Step {j}: max index = {edge_index.max().item()}, shape = {edge_index.shape}")
-                if edge_index.max() >= self.data["num_nodes"]:
+                if edge_index.max() >= self.num_nodes:
                     print(f"Warning: Meta-path {i}, Step {j} contains index larger than number of nodes")
 
         self.pea_channels = nn.ModuleList()
@@ -130,6 +119,8 @@ class PEAGATRecsysModel(nn.Module):
         else:
             self.fc1 = nn.Linear(2 * self.repr_dim, self.repr_dim)
         self.fc2 = nn.Linear(self.repr_dim, 1)
+
+        self.reset_parameters()
 
     def reset_parameters(self):
         if not self.if_use_features:
@@ -186,8 +177,7 @@ class PEAGATRecsysModel(nn.Module):
             self.cache_repr = self.forward()
         pos_pred = self.predict(pos_edge_index)
         neg_pred = self.predict(neg_edge_index)
-        # print(f"Pos pred: {pos_pred}, Neg pred: {neg_pred}")
+        
         loss = self.bpr_loss(pos_pred, neg_pred)
-        # print(f"Loss: {loss}")
 
         return loss
