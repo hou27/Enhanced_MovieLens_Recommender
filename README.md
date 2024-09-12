@@ -6,9 +6,9 @@ This project extends and refines the PEAGNN (Path Extrapolation and Aggregation 
 
 1. **Redefined Positive/Negative Sample Criteria**: 
    - Implemented a new, more nuanced approach to classifying user interactions:
-     - Positive samples: Ratings >= 3
-     - Negative samples: Ratings < 3
-   - This redefinition aims to capture user preferences more accurately, considering ratings of 3 and above as indicative of positive user experience.
+     - Positive samples: Ratings >= 4
+     - Negative samples: Ratings <= 2
+   - This redefinition aims to capture user preferences more accurately, considering ratings of 4 and above as indicative of positive user experience.
 
 2. **Adaptive Sampling Strategy**:
    - Developed a method to handle the natural imbalance between positive and negative samples resulting from the new criteria.
@@ -26,12 +26,12 @@ This project extends and refines the PEAGNN (Path Extrapolation and Aggregation 
 
 - **Data Preprocessing**: The `MovieLens` class now includes methods for preparing training data based on the new positive/negative sample criteria.
 - **Model**: The `PEAGATRecsysModel` class has been updated to work with the redefined interaction types.
-- **Training and Evaluation**: The `BaseSolver` class now incorporates the new sample definitions in both training and evaluation processes.
+- **Training and Evaluation**: The `Solver` class now incorporates the new sample definitions in both training and evaluation processes.
 
 ## Running the Code
 
 ```bash
-python main.py --dataset Movielens --type 25m --hidden_dim 64 --num_layers 2 --num_heads 1 --dropout 0.1 --channel_aggr att --device cuda --gpu_idx 0 --runs 5 --epochs 30 --batch_size 1024 --lr 0.001 --weight_decay 0.001
+python main.py --dataset Movielens --type 25m --hidden_dim 64 --num_layers 2 --num_heads 1 --dropout 0 --channel_aggr att --device cuda --gpu_idx 0 --runs 5 --epochs 30 --batch_size 1024 --lr 0.001 --weight_decay 0.001
 ```
 
 ## Future Work

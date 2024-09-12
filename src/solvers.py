@@ -18,7 +18,6 @@ class Solver:
         self.dataset = dataset
         self.model_args = model_args
         self.train_args = train_args
-        # self.num_layers = getattr(model, 'num_layers', 2)
         self.log_dir = os.path.join('logs', datetime.now().strftime('%Y%m%d_%H%M%S'))
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file = os.path.join(self.log_dir, 'training_log.jsonl')
@@ -67,13 +66,9 @@ class Solver:
 
         # 모든 학습이 끝난 후 최종 모델 저장
         torch.save(self.model.state_dict(), os.path.join(self.log_dir, 'final_model.pth'))
-                
-
 
     def train(self, optimizer):
         self.model.train()
-        # total_loss = 0
-        # total_samples = 0
         total_loss = []
 
         self.dataset.cf_negative_sampling()
@@ -96,9 +91,10 @@ class Solver:
             neg_edge_index = torch.stack([users, neg_items])
 
             optimizer.zero_grad() # 각 배치마다 새로운 그래디언트 계산
+            # loss 계산
             loss = self.model.loss(pos_edge_index, neg_edge_index)
-            loss.backward()
-            optimizer.step()
+            loss.backward() # 역전파
+            optimizer.step() # 가중치 업데이트
             
             total_loss.append(loss.detach().cpu().item())
             train_loss = np.mean(total_loss)
