@@ -1,5 +1,4 @@
 import argparse
-from src.models import update_pea_graph_input
 import torch
 
 from src import MovieLens, PEAGATRecsysModel, Solver
