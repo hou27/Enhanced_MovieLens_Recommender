@@ -1,6 +1,6 @@
 # Enhanced-MovieLens-Recommender
 
-This project extends and refines the PEAGNN (Path Extrapolation and Aggregation Graph Neural Networks) approach for movie recommendations using the MovieLens dataset. Building upon the work from [PEAGNN](https://github.com/blindsubmission1/PEAGNN), our primary focus is on redefining the criteria for positive and negative samples to improve recommendation accuracy.
+This project extends and refines the PEAGNN (Path Extrapolation and Aggregation Graph Neural Networks) approach for movie recommendations using the MovieLens dataset. Building upon the work from [PEAGNN](https://github.com/blindsubmission1/PEAGNN), primary focus is on redefining the criteria for positive and negative samples to improve recommendation accuracy.
 
 ## Key Contributions
 
@@ -40,6 +40,6 @@ python main.py --dataset Movielens --type 25m --hidden_dim 64 --num_layers 2 --n
 - Explore how the redefined criteria affect recommendation diversity and novelty.
 - Conduct comparative studies with other sample definition approaches in recommender systems.
 
-## Acknowledgements
+## Project Basis
 
 This work is based on the PEAGNN project.
